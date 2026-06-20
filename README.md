@@ -27,8 +27,8 @@ python generator.py --diameter 120 --height 100 --wall 3 --base 4 --output pot.s
 | `--taper` | 5 | Wall draft angle (degrees) |
 | `--rim-thickness` | 2 | Extra rim thickness (mm) |
 | `--rim-height` | 5 | Rim height (mm) |
-| `--foot-height` | 5 | Height of bottom ventilation feet (mm), 0 to disable |
-| `--foot-ring-count` | 1 | Number of concentric bottom ventilation rings |
+| `--foot-height` | 3 | Height of bottom ventilation feet (mm), 0 to disable |
+| `--foot-ring-count` | 2 | Number of concentric bottom ventilation rings |
 | `--foot-ring-width` | 8 | Width of each bottom ring (mm) |
 | `--output` | flowerpots.step | Output STEP file path |
 

@@ -13,9 +13,8 @@ def make_flowerpot(
     taper_angle: float = 5.0,
     rim_thickness: float = 2.0,
     rim_height: float = 5.0,
-    foot_height: float = 5.0,
-    foot_ring_count: int = 1,
-    foot_ring_width: float = 8.0,
+    foot_height: float = 3.0,
+    foot_ring_count: int = 2,
 ) -> cq.Workplane:
     """
     Generate a parametric flowerpot as a STEP file.
@@ -44,8 +43,6 @@ def make_flowerpot(
         Height of the bottom ventilation feet (mm). Set to 0 to omit.
     foot_ring_count
         Number of concentric rings on the bottom for ventilation.
-    foot_ring_width
-        Width of each bottom ventilation ring (mm).
     """
     radius = outer_diameter / 2.0
     taper = math.tan(math.radians(taper_angle))
@@ -83,6 +80,68 @@ def make_flowerpot(
         .revolve()
     )
 
+    # Bottom ventilation feet / rings
+    if foot_height > 0 and foot_ring_count > 0:
+        foot_ring_width = bottom_radius / foot_ring_count
+        if foot_ring_width <= foot_height * 2.0:
+            raise ValueError("Foot height too big for the number of foot rings.")
+        #innermost_outer_r = bottom_radius - (foot_ring_count - 1) * foot_ring_width
+        #if innermost_outer_r - foot_ring_width < 0:
+        #    raise ValueError("Foot rings too wide for the pot bottom.")
+
+        flare = foot_height * math.tan(math.radians(45))
+
+        feet = None
+        for i in range(foot_ring_count):
+            outer_r = bottom_radius - i * foot_ring_width
+            inner_r = outer_r - foot_ring_width
+            ring_profile = [
+                (outer_r, 0),
+                (outer_r - flare, -foot_height),
+                (inner_r + flare, -foot_height),
+                (inner_r, 0),
+            ]
+            ring = (
+                cq.Workplane("XZ")
+                .polyline(ring_profile)
+                .close()
+                .revolve()
+            )
+            feet = ring if feet is None else feet.union(ring)
+
+        # cut radial slits through the feet, one per drain
+        if number_of_drains > 0 and feet is not None:
+            slit_width = 0.0
+            slit_length = bottom_radius + flare + 2
+
+            half_top = slit_width / 2.0
+            half_bottom = half_top + flare
+            slit_profile = [
+                (half_top, 1),
+                (half_top, 0),
+                (half_bottom, -foot_height),
+                (half_bottom, -foot_height - 1),
+                (-half_bottom, -foot_height - 1),
+                (-half_bottom, -foot_height),
+                (-half_top, 0),
+                (-half_top, 1),
+            ]
+            slit = (
+                cq.Workplane("YZ")
+                .polyline(slit_profile)
+                .close()
+                .extrude(slit_length * 2.0)
+                #.translate((slit_length / 2, 0, 0))
+            )
+            for i in range(number_of_drains):
+                angle = 2 * math.pi * i / number_of_drains
+                slit_rotated = slit.rotate(
+                    (0, 0, 0), (0, 0, 1), math.degrees(angle)
+                )
+                feet = feet.cut(slit_rotated)
+
+        pot = pot.union(feet)
+
     # Drainage holes
     if number_of_drains > 0 and drain_diameter > 0:
         hole_radius = drain_diameter / 2.0
@@ -112,60 +171,12 @@ def make_flowerpot(
             ]
             holes = (
                 cq.Workplane("XY")
+                .workplane(offset=-foot_height)
                 .pushPoints(points)
                 .circle(hole_radius)
                 .extrude(height)
             )
         pot = pot.cut(holes)
-
-    # Bottom ventilation feet / rings
-    if foot_height > 0 and foot_ring_count > 0 and foot_ring_width > 0:
-        total_ring_width = foot_ring_count * foot_ring_width
-        if total_ring_width >= bottom_radius:
-            raise ValueError("Foot rings too wide for the pot bottom.")
-        if foot_ring_width <= foot_height * 2.0:
-            raise ValueError("Foot height too small for the foot ring width.")
-        innermost_outer_r = bottom_radius - (foot_ring_count - 1) * foot_ring_width
-        if innermost_outer_r - foot_ring_width <= 0:
-            raise ValueError("Foot rings too wide for the pot bottom.")
-
-        flare = foot_height * math.tan(math.radians(45))
-
-        feet = None
-        for i in range(foot_ring_count):
-            outer_r = bottom_radius - i * foot_ring_width
-            inner_r = outer_r - foot_ring_width
-            ring_profile = [
-                (outer_r, 0),
-                (outer_r - flare, -foot_height),
-                (inner_r + flare, -foot_height),
-                (inner_r, 0),
-            ]
-            ring = (
-                cq.Workplane("XZ")
-                .polyline(ring_profile)
-                .close()
-                .revolve()
-            )
-            feet = ring if feet is None else feet.union(ring)
-
-        # cut radial slits through the feet, one per drain
-        if number_of_drains > 0 and feet is not None:
-            slit_width = drain_diameter if drain_diameter > 0 else 4.0
-            slit_length = bottom_radius + flare + 2
-            slit = (
-                cq.Workplane("XY")
-                .box(slit_length, slit_width, foot_height + 2)
-                .translate((slit_length / 2, 0, -foot_height / 2 - 1))
-            )
-            for i in range(number_of_drains):
-                angle = 2 * math.pi * i / number_of_drains
-                slit_rotated = slit.rotate(
-                    (0, 0, 0), (0, 0, 1), math.degrees(angle)
-                )
-                feet = feet.cut(slit_rotated)
-
-        pot = pot.union(feet)
 
     return pot
 
@@ -181,7 +192,6 @@ def main() -> None:
     parser.add_argument("--taper", type=float, default=5.0, help="Wall taper angle in degrees.")
     parser.add_argument("--foot-height", type=float, default=3.0, help="Height of bottom ventilation feet in mm (0 to disable).")
     parser.add_argument("--foot-ring-count", type=int, default=2, help="Number of concentric bottom ventilation rings.")
-    parser.add_argument("--foot-ring-width", type=float, default=8.0, help="Width of each bottom ventilation ring in mm.")
     parser.add_argument("--rim-thickness", type=float, default=2.0, help="Extra rim thickness in mm.")
     parser.add_argument("--rim-height", type=float, default=5.0, help="Rim height in mm.")
     parser.add_argument("--output", type=Path, default=Path("flowerpots.step"), help="Output STEP file path.")
@@ -200,7 +210,6 @@ def main() -> None:
         rim_height=args.rim_height,
         foot_height=args.foot_height,
         foot_ring_count=args.foot_ring_count,
-        foot_ring_width=args.foot_ring_width,
     )
 
     cq.exporters.export(pot, str(args.output))
