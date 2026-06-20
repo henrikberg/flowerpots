@@ -1,8 +1,20 @@
 import cadquery as cq
 import argparse
+import logging
 import math
 import sys
 from pathlib import Path
+
+
+def setup_logging() -> None:
+    """Set up logging configuration."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(levelname)s: %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stderr)
+        ]
+    )
 
 
 def validate_parameters(
@@ -143,8 +155,8 @@ def make_flowerpot(
         wall_thickness = max(wall_thickness, 0.1)
         inner_radius_bottom = bottom_radius - wall_thickness
         inner_radius_top = radius - wall_thickness
-        print(
-            f"Warning: wall thickness too large for bottom radius; "
+        logging.warning(
+            f"Wall thickness too large for bottom radius; "
             f"capping to {wall_thickness:.2f}."
         )
 
@@ -183,14 +195,14 @@ def make_flowerpot(
             if max_rings >= bottom_radius / min_width:
                 max_rings -= 1
             if max_rings < 1:
-                print(
-                    f"Warning: foot height {foot_height} is too large for "
+                logging.warning(
+                    f"Foot height {foot_height} is too large for "
                     f"bottom radius {bottom_radius:.2f}; disabling feet."
                 )
                 foot_ring_count = 0
             else:
-                print(
-                    f"Warning: foot height {foot_height} is too big for "
+                logging.warning(
+                    f"Foot height {foot_height} is too big for "
                     f"{foot_ring_count} rings; reducing to {max_rings}."
                 )
                 foot_ring_count = max_rings
@@ -263,8 +275,8 @@ def make_flowerpot(
             min_circle_radius = hole_radius / math.sin(math.pi / number_of_drains)
             if drain_circle_radius < min_circle_radius:
                 if drain_circle_radius <= hole_radius:
-                    print(
-                        f"Warning: drain diameter {drain_diameter} too large "
+                    logging.warning(
+                        f"Drain diameter {drain_diameter} too large "
                         f"for pot base; disabling drains."
                     )
                     number_of_drains = 0
@@ -273,14 +285,14 @@ def make_flowerpot(
                         math.pi / math.asin(hole_radius / drain_circle_radius)
                     )
                     if max_drains < 1:
-                        print(
-                            f"Warning: drain diameter {drain_diameter} too large "
+                        logging.warning(
+                            f"Drain diameter {drain_diameter} too large "
                             f"for pot base; disabling drains."
                         )
                         number_of_drains = 0
                     else:
-                        print(
-                            f"Warning: {number_of_drains} drains too large for "
+                        logging.warning(
+                            f"{number_of_drains} drains too large for "
                             f"pot base; reducing to {max_drains}."
                         )
                         number_of_drains = max_drains
@@ -321,6 +333,8 @@ def make_flowerpot(
 
 
 def main() -> None:
+    setup_logging()
+    
     parser = argparse.ArgumentParser(description="Generate a parametric flowerpot STEP file.")
     parser.add_argument("--diameter", type=float, default=120.0, help="Outer top diameter in mm.")
     parser.add_argument("--bottom-diameter", type=float, default=0.0, help="Outer bottom diameter in mm.")
@@ -336,7 +350,12 @@ def main() -> None:
     parser.add_argument("--rim-height", type=float, default=5.0, help="Rim height in mm.")
     parser.add_argument("filename", type=Path, default=Path("flowerpots.step"), nargs="?", help="Output STEP file path.")
 
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+    except SystemExit:
+        # Handle argparse errors gracefully
+        logging.error("Invalid command line arguments. Use --help for usage information.")
+        sys.exit(1)
 
     # Validate parameters before generating the pot
     try:
@@ -355,26 +374,34 @@ def main() -> None:
             foot_ring_count=args.rings,
         )
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logging.error(f"Parameter validation failed: {e}")
         sys.exit(1)
 
-    pot = make_flowerpot(
-        top_diameter=args.diameter,
-        bottom_diameter=args.bottom_diameter,
-        taper_angle=args.taper,
-        height=args.height,
-        wall_thickness=args.wall,
-        base_thickness=args.base,
-        drain_diameter=args.drain_diameter,
-        number_of_drains=args.drains,
-        rim_thickness=args.rim_thickness,
-        rim_height=args.rim_height,
-        foot_height=args.foot,
-        foot_ring_count=args.rings,
-    )
+    try:
+        pot = make_flowerpot(
+            top_diameter=args.diameter,
+            bottom_diameter=args.bottom_diameter,
+            taper_angle=args.taper,
+            height=args.height,
+            wall_thickness=args.wall,
+            base_thickness=args.base,
+            drain_diameter=args.drain_diameter,
+            number_of_drains=args.drains,
+            rim_thickness=args.rim_thickness,
+            rim_height=args.rim_height,
+            foot_height=args.foot,
+            foot_ring_count=args.rings,
+        )
 
-    cq.exporters.export(pot, str(args.filename))
-    print(f"Exported flowerpot to {args.filename}")
+        try:
+            cq.exporters.export(pot, str(args.filename))
+            logging.info(f"Exported flowerpot to {args.filename}")
+        except Exception as e:
+            logging.error(f"Failed to export flowerpot to {args.filename}: {e}")
+            sys.exit(1)
+    except Exception as e:
+        logging.error(f"Failed to generate flowerpot: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
