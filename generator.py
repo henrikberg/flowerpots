@@ -74,18 +74,25 @@ def make_flowerpot(
         .loft()
     )
 
-    pot = outer.cut(inner)
-
-    # Reinforce the rim
+    # Reinforce the rim with a max 45° outer taper for 3D printing
     if rim_thickness > 0 and rim_height > 0:
+        top_outer = radius + rim_thickness
+        top_inner = radius
+        bottom_outer = max(radius + rim_thickness - rim_height, radius)
+        bottom_inner = radius
         rim = (
             cq.Workplane("XY")
             .workplane(offset=height - rim_height)
-            .circle(radius + rim_thickness)
-            .circle(radius)
-            .extrude(rim_height)
+            .circle(bottom_outer)
+            .circle(bottom_inner)
+            .workplane(offset=rim_height)
+            .circle(top_outer)
+            .circle(top_inner)
+            .loft()
         )
-        pot = pot.union(rim)
+        outer = outer.union(rim)
+
+    pot = outer.cut(inner)
 
     # Drainage holes
     if number_of_drains > 0 and drain_diameter > 0:
