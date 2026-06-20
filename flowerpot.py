@@ -23,6 +23,13 @@ class FlowerpotParams:
     rim_height: float = 5.0
     foot_height: float = 3.0
     foot_ring_count: int = 2
+    # Advanced geometry parameters
+    shape: str = "circular"  # circular, square, rectangular
+    width: float = 0.0  # For rectangular shapes (0 = use diameter)
+    pattern: str = "none"  # none, lines, dots, waves
+    pattern_depth: float = 0.5  # Depth of decorative patterns
+    modular: bool = False  # Create stackable sections
+    sections: int = 1  # Number of modular sections
 
 
 # Predefined pot style presets
@@ -132,6 +139,12 @@ def load_preset(preset_name: str) -> FlowerpotParams:
                 rim_height=config.get("rim_height", 5.0),
                 foot_height=config.get("foot_height", 3.0),
                 foot_ring_count=config.get("foot_ring_count", 2),
+                shape=config.get("shape", "circular"),
+                width=config.get("width", 0.0),
+                pattern=config.get("pattern", "none"),
+                pattern_depth=config.get("pattern_depth", 0.5),
+                modular=config.get("modular", False),
+                sections=config.get("sections", 1),
             )
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in preset file '{preset_name}': {e}")
@@ -160,6 +173,12 @@ def save_preset(preset_name: str, params: FlowerpotParams) -> None:
         "rim_height": params.rim_height,
         "foot_height": params.foot_height,
         "foot_ring_count": params.foot_ring_count,
+        "shape": params.shape,
+        "width": params.width,
+        "pattern": params.pattern,
+        "pattern_depth": params.pattern_depth,
+        "modular": params.modular,
+        "sections": params.sections,
     }
     
     try:
@@ -330,7 +349,248 @@ def validate_parameters(params: FlowerpotParams) -> None:
         raise ValueError("Foot height cannot exceed base thickness")
 
 
-def make_flowerpot(params: FlowerpotParams) -> cq.Workplane:
+def add_decorative_pattern(pot: cq.Workplane, params: FlowerpotParams) -> cq.Workplane:
+    """Add decorative patterns to the pot surface."""
+    if params.pattern == "none":
+        return pot
+    
+    pattern_height = params.height - params.base_thickness - params.rim_height
+    
+    if params.pattern == "lines":
+        # Add vertical lines around the pot
+        num_lines = 12
+        line_width = 1.0
+        line_depth = params.pattern_depth
+        
+        lines = None
+        for i in range(num_lines):
+            angle = 360 * i / num_lines
+            line = (
+                cq.Workplane("XY")
+                .workplane(offset=params.base_thickness)
+                .rect(line_width, pattern_height)
+                .extrude(line_depth)
+                .rotate((0, 0, 0), (0, 0, 1), angle)
+                .translate((0, 0, 0))
+            )
+            lines = line if lines is None else lines.union(line)
+        
+        if lines:
+            pot = pot.union(lines)
+    
+    elif params.pattern == "dots":
+        # Add dot pattern
+        dot_diameter = 3.0
+        dot_depth = params.pattern_depth
+        rows = 8
+        cols = 12
+        
+        dots = None
+        for row in range(rows):
+            for col in range(cols):
+                angle = 360 * col / cols
+                height_offset = params.base_thickness + (row + 1) * pattern_height / (rows + 1)
+                dot = (
+                    cq.Workplane("XY")
+                    .workplane(offset=height_offset)
+                    .circle(dot_diameter / 2)
+                    .extrude(dot_depth)
+                    .rotate((0, 0, 0), (0, 0, 1), angle)
+                )
+                dots = dot if dots is None else dots.union(dot)
+        
+        if dots:
+            pot = pot.union(dots)
+    
+    elif params.pattern == "waves":
+        # Add wave pattern
+        wave_amplitude = params.pattern_depth
+        wave_frequency = 8
+        wave_width = 2.0
+        
+        waves = None
+        for i in range(wave_frequency):
+            angle = 360 * i / wave_frequency
+            # Create wave profile as a series of points
+            wave_points = []
+            num_points = 20
+            for j in range(num_points + 1):
+                y = j * pattern_height / num_points
+                x = wave_amplitude * math.sin(2 * math.pi * j / num_points * 2)  # 2 complete waves
+                wave_points.append((x, y))
+            
+            # Create the wave shape
+            wave_profile = (
+                cq.Workplane("XZ")
+                .polyline(wave_points)
+                .rect(wave_width, 0.1)
+                .extrude(1)
+            )
+            
+            # Position and rotate the wave
+            wave = (
+                wave_profile
+                .rotate((0, 0, 0), (0, 0, 1), angle)
+                .translate((0, 0, params.base_thickness))
+            )
+            waves = wave if waves is None else waves.union(wave)
+        
+        if waves:
+            pot = pot.union(waves)
+    
+    return pot
+
+
+def create_square_pot(params: FlowerpotParams) -> cq.Workplane:
+    """Create a square-shaped pot."""
+    size = params.top_diameter
+    bottom_size = params.bottom_diameter if params.bottom_diameter > 0 else size - 2 * params.height * math.tan(math.radians(params.taper_angle))
+    
+    # Main body profile
+    body_profile = [
+        (bottom_size/2, 0),
+        (size/2, params.height),
+    ]
+    
+    if params.rim_thickness > 0 and params.rim_height > 0:
+        top_outer = size/2 + params.rim_thickness
+        bottom_outer = max(size/2 + params.rim_thickness - params.rim_height, size/2)
+        body_profile.append((top_outer, params.height))
+        body_profile.append((bottom_outer, params.height - params.rim_height))
+        if bottom_outer > size/2:
+            body_profile.append((size/2, params.height - params.rim_height))
+    
+    body_profile.extend([
+        (size/2 - params.wall_thickness, params.height),
+        (bottom_size/2 - params.wall_thickness, params.base_thickness),
+        (0, params.base_thickness),
+        (0, 0),
+    ])
+    
+    # Create the pot by revolving and then making it square
+    pot = (
+        cq.Workplane("XZ")
+        .polyline(body_profile)
+        .close()
+        .revolve()
+    )
+    
+    # Convert to square shape
+    pot = pot.intersect(
+        cq.Workplane("XY")
+        .rect(size, size)
+        .extrude(params.height * 2)
+        .translate((0, 0, -params.height))
+    )
+    
+    return pot
+
+
+def create_rectangular_pot(params: FlowerpotParams) -> cq.Workplane:
+    """Create a rectangular-shaped pot."""
+    length = params.top_diameter
+    width = params.width if params.width > 0 else length * 0.7
+    bottom_length = params.bottom_diameter if params.bottom_diameter > 0 else length - 2 * params.height * math.tan(math.radians(params.taper_angle))
+    bottom_width = bottom_length * (width / length) if bottom_length > 0 else width - 2 * params.height * math.tan(math.radians(params.taper_angle))
+    
+    # Create the pot as a rectangular solid
+    outer = (
+        cq.Workplane("XY")
+        .rect(length, width)
+        .extrude(params.height)
+    )
+    
+    # Create inner cavity
+    inner = (
+        cq.Workplane("XY")
+        .rect(length - 2*params.wall_thickness, width - 2*params.wall_thickness)
+        .workplane(offset=params.base_thickness)
+        .extrude(params.height - params.base_thickness)
+    )
+    
+    pot = outer.cut(inner)
+    
+    # Add rim if specified
+    if params.rim_thickness > 0 and params.rim_height > 0:
+        rim = (
+            cq.Workplane("XY")
+            .rect(length + 2*params.rim_thickness, width + 2*params.rim_thickness)
+            .extrude(params.rim_height)
+            .translate((0, 0, params.height - params.rim_height))
+        )
+        pot = pot.union(rim)
+    
+    return pot
+
+
+def create_modular_sections(params: FlowerpotParams) -> cq.Workplane:
+    """Create stackable modular sections."""
+    section_height = params.height / params.sections
+    total_pot = None
+    
+    for i in range(params.sections):
+        # Create parameters for this section
+        section_params = FlowerpotParams(
+            top_diameter=params.top_diameter,
+            bottom_diameter=params.top_diameter - 2 * section_height * math.tan(math.radians(params.taper_angle)),
+            taper_angle=params.taper_angle,
+            height=section_height,
+            wall_thickness=params.wall_thickness,
+            base_thickness=params.base_thickness,
+            drain_diameter=params.drain_diameter if i == params.sections - 1 else 0,  # Only last section has drains
+            number_of_drains=params.number_of_drains,
+            rim_thickness=params.rim_thickness if i == params.sections - 1 else 0,  # Only top section has rim
+            rim_height=params.rim_height if i == params.sections - 1 else 0,
+            foot_height=params.foot_height if i == 0 else 0,  # Only bottom section has feet
+            foot_ring_count=params.foot_ring_count,
+            shape=params.shape,
+            width=params.width,
+            pattern=params.pattern,
+            pattern_depth=params.pattern_depth,
+            modular=False,  # Prevent infinite recursion
+            sections=1,
+        )
+        
+        # Create the section
+        if params.shape == "circular":
+            section = make_circular_pot(section_params)
+        elif params.shape == "square":
+            section = create_square_pot(section_params)
+        elif params.shape == "rectangular":
+            section = create_rectangular_pot(section_params)
+        else:
+            section = make_circular_pot(section_params)
+        
+        # Add interlocking features
+        if i > 0:  # Add male connector to bottom
+            connector_height = 2.0
+            connector = (
+                cq.Workplane("XY")
+                .circle(params.top_diameter/2 - params.wall_thickness - 1.0)
+                .extrude(connector_height)
+            )
+            section = section.union(connector)
+        
+        if i < params.sections - 1:  # Add female connector to top
+            connector_height = 2.0
+            connector = (
+                cq.Workplane("XY")
+                .circle(params.top_diameter/2 - params.wall_thickness - 1.5)
+                .extrude(connector_height)
+                .translate((0, 0, section_height - connector_height))
+            )
+            section = section.cut(connector)
+        
+        # Position the section
+        section = section.translate((0, 0, i * section_height))
+        
+        # Combine with total pot
+        total_pot = section if total_pot is None else total_pot.union(section)
+    
+    return total_pot
+
+
+def make_circular_pot(params: FlowerpotParams) -> cq.Workplane:
     """
     Generate a parametric flowerpot as a STEP file.
 
@@ -535,6 +795,36 @@ def make_flowerpot(params: FlowerpotParams) -> cq.Workplane:
     return pot
 
 
+def make_flowerpot(params: FlowerpotParams) -> cq.Workplane:
+    """
+    Generate a parametric flowerpot with advanced geometry options.
+
+    Parameters
+    ----------
+    params
+        FlowerpotParams containing all flowerpot dimensions and settings.
+    """
+    
+    # Handle modular sections first
+    if params.modular and params.sections > 1:
+        pot = create_modular_sections(params)
+    else:
+        # Handle different shapes
+        if params.shape == "circular":
+            pot = make_circular_pot(params)
+        elif params.shape == "square":
+            pot = create_square_pot(params)
+        elif params.shape == "rectangular":
+            pot = create_rectangular_pot(params)
+        else:
+            pot = make_circular_pot(params)  # Default to circular
+    
+    # Add decorative patterns
+    pot = add_decorative_pattern(pot, params)
+    
+    return pot
+
+
 def main() -> None:
     setup_logging()
     
@@ -561,7 +851,20 @@ def main() -> None:
                        help="Save current parameters as a named preset")
     parser.add_argument("--list-presets", action="store_true", 
                        help="List all available presets and exit")
-    parser.add_argument("filename", type=Path, default=Path("flowerpots.step"), nargs="?", help="Output file path.")
+    # Advanced geometry arguments
+    parser.add_argument("--shape", choices=["circular", "square", "rectangular"], default="circular",
+                       help="Pot shape: circular (default), square, or rectangular")
+    parser.add_argument("--width", type=float, default=0.0,
+                       help="Width for rectangular pots (0 = use 0.7 * diameter)")
+    parser.add_argument("--pattern", choices=["none", "lines", "dots", "waves"], default="none",
+                       help="Decorative pattern: none (default), lines, dots, or waves")
+    parser.add_argument("--pattern-depth", type=float, default=0.5,
+                       help="Depth of decorative patterns in mm")
+    parser.add_argument("--modular", action="store_true",
+                       help="Create stackable modular sections")
+    parser.add_argument("--sections", type=int, default=1,
+                       help="Number of modular sections")
+    parser.add_argument("filename", type=Path, default=Path("flowerpot"), nargs="?", help="Output file path.")
 
     try:
         args = parser.parse_args()
@@ -593,6 +896,12 @@ def main() -> None:
             rim_height=args.rim_height,
             foot_height=args.foot,
             foot_ring_count=args.rings,
+            shape=args.shape,
+            width=args.width,
+            pattern=args.pattern,
+            pattern_depth=args.pattern_depth,
+            modular=args.modular,
+            sections=args.sections,
         )
 
     # Handle --save-preset

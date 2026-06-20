@@ -24,7 +24,7 @@ This document outlines potential improvements for the parametric flowerpot gener
 - JSON/YAML config file support for batch generation
 - Save/load favorite parameter sets
 
-### 5. Advanced Geometry
+### 5. Advanced Geometry 🚧
 - Add decorative patterns/texturing options
 - Support for square/rectangular pots
 - Modular pot system (stackable sections)
