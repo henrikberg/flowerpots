@@ -25,6 +25,151 @@ class FlowerpotParams:
     foot_ring_count: int = 2
 
 
+# Predefined pot style presets
+PRESETS = {
+    "succulent": {
+        "description": "Small, shallow pot for succulents and cacti",
+        "params": FlowerpotParams(
+            top_diameter=80.0,
+            bottom_diameter=60.0,
+            taper_angle=3.0,
+            height=60.0,
+            wall_thickness=2.5,
+            base_thickness=3.0,
+            drain_diameter=6.0,
+            number_of_drains=1,
+            rim_thickness=1.5,
+            rim_height=3.0,
+            foot_height=2.0,
+            foot_ring_count=1,
+        ),
+    },
+    "herb": {
+        "description": "Medium-sized standard pot for herbs and general use",
+        "params": FlowerpotParams(
+            top_diameter=120.0,
+            bottom_diameter=0.0,
+            taper_angle=5.0,
+            height=100.0,
+            wall_thickness=3.0,
+            base_thickness=4.0,
+            drain_diameter=8.0,
+            number_of_drains=4,
+            rim_thickness=2.0,
+            rim_height=5.0,
+            foot_height=3.0,
+            foot_ring_count=2,
+        ),
+    },
+    "tree": {
+        "description": "Large, sturdy pot for trees and large plants",
+        "params": FlowerpotParams(
+            top_diameter=200.0,
+            bottom_diameter=150.0,
+            taper_angle=2.0,
+            height=180.0,
+            wall_thickness=5.0,
+            base_thickness=8.0,
+            drain_diameter=12.0,
+            number_of_drains=6,
+            rim_thickness=3.0,
+            rim_height=8.0,
+            foot_height=5.0,
+            foot_ring_count=3,
+        ),
+    },
+}
+
+
+def list_presets() -> None:
+    """List all available presets with their descriptions."""
+    print("Available presets:")
+
+    for name, preset_data in PRESETS.items():
+        print(f"  {name:<10} - {preset_data['description']}")
+    
+    # Saved presets
+    presets_dir = Path("presets")
+    if presets_dir.exists():
+        saved_presets = list(presets_dir.glob("*.json"))
+        if saved_presets:
+            for preset_file in sorted(saved_presets):
+                try:
+                    with open(preset_file, 'r') as f:
+                        config = json.load(f)
+                    height = config.get("height", 0)
+                    diameter = config.get("top_diameter", 0)
+                    name = preset_file.stem
+                    print(f"  {name:<10} - {diameter}mm diameter, {height}mm height")
+                except (json.JSONDecodeError, KeyError):
+                    print(f"  {preset_file.stem:<10} - (invalid preset file)")
+
+
+def load_preset(preset_name: str) -> FlowerpotParams:
+    """Load a preset by name (built-in or saved)."""
+    # Check if it's a built-in preset
+    if preset_name in PRESETS:
+        return PRESETS[preset_name]["params"]
+    
+    # Check if it's a saved preset file
+    preset_path = Path(f"presets/{preset_name}.json")
+    if preset_path.exists():
+        try:
+            with open(preset_path, 'r') as f:
+                config = json.load(f)
+            
+            # Extract parameters from config, using defaults for missing values
+            return FlowerpotParams(
+                top_diameter=config.get("top_diameter", 120.0),
+                bottom_diameter=config.get("bottom_diameter", 0.0),
+                taper_angle=config.get("taper_angle", 5.0),
+                height=config.get("height", 100.0),
+                wall_thickness=config.get("wall_thickness", 3.0),
+                base_thickness=config.get("base_thickness", 4.0),
+                drain_diameter=config.get("drain_diameter", 8.0),
+                number_of_drains=config.get("number_of_drains", 4),
+                rim_thickness=config.get("rim_thickness", 2.0),
+                rim_height=config.get("rim_height", 5.0),
+                foot_height=config.get("foot_height", 3.0),
+                foot_ring_count=config.get("foot_ring_count", 2),
+            )
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in preset file '{preset_name}': {e}")
+    
+    # Not found
+    built_in = ", ".join(PRESETS.keys())
+    raise ValueError(f"Unknown preset '{preset_name}'. Built-in presets: {built_in}")
+
+
+def save_preset(preset_name: str, params: FlowerpotParams) -> None:
+    """Save current parameters as a named preset."""
+    presets_dir = Path("presets")
+    presets_dir.mkdir(exist_ok=True)
+    
+    preset_path = presets_dir / f"{preset_name}.json"
+    config = {
+        "top_diameter": params.top_diameter,
+        "bottom_diameter": params.bottom_diameter,
+        "taper_angle": params.taper_angle,
+        "height": params.height,
+        "wall_thickness": params.wall_thickness,
+        "base_thickness": params.base_thickness,
+        "drain_diameter": params.drain_diameter,
+        "number_of_drains": params.number_of_drains,
+        "rim_thickness": params.rim_thickness,
+        "rim_height": params.rim_height,
+        "foot_height": params.foot_height,
+        "foot_ring_count": params.foot_ring_count,
+    }
+    
+    try:
+        with open(preset_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        logging.info(f"Preset saved to {preset_path}")
+    except Exception as e:
+        logging.error(f"Failed to save preset: {e}")
+
+
 def export_parameter_summary(filename: Path, params: FlowerpotParams) -> None:
     """Export parameter summary to a JSON file."""
     # Calculate derived dimensions
@@ -410,6 +555,12 @@ def main() -> None:
                        help="Output format: stl (default), step, or all")
     parser.add_argument("--summary", action="store_true", 
                        help="Export parameter summary as JSON file")
+    parser.add_argument("--preset", type=str, 
+                       help="Use a preset (built-in: succulent, herb, tree, or saved preset file)")
+    parser.add_argument("--save-preset", type=str, 
+                       help="Save current parameters as a named preset")
+    parser.add_argument("--list-presets", action="store_true", 
+                       help="List all available presets and exit")
     parser.add_argument("filename", type=Path, default=Path("flowerpots.step"), nargs="?", help="Output file path.")
 
     try:
@@ -419,21 +570,35 @@ def main() -> None:
         logging.error("Invalid command line arguments. Use --help for usage information.")
         sys.exit(1)
 
+    # Handle --list-presets
+    if args.list_presets:
+        list_presets()
+        sys.exit(0)
+
     # Create parameters struct
-    params = FlowerpotParams(
-        top_diameter=args.diameter,
-        bottom_diameter=args.bottom_diameter,
-        taper_angle=args.taper,
-        height=args.height,
-        wall_thickness=args.wall,
-        base_thickness=args.base,
-        drain_diameter=args.drain_diameter,
-        number_of_drains=args.drains,
-        rim_thickness=args.rim_thickness,
-        rim_height=args.rim_height,
-        foot_height=args.foot,
-        foot_ring_count=args.rings,
-    )
+    if args.preset:
+        params = load_preset(args.preset)
+        logging.info(f"Using preset: {args.preset}")
+    else:
+        params = FlowerpotParams(
+            top_diameter=args.diameter,
+            bottom_diameter=args.bottom_diameter,
+            taper_angle=args.taper,
+            height=args.height,
+            wall_thickness=args.wall,
+            base_thickness=args.base,
+            drain_diameter=args.drain_diameter,
+            number_of_drains=args.drains,
+            rim_thickness=args.rim_thickness,
+            rim_height=args.rim_height,
+            foot_height=args.foot,
+            foot_ring_count=args.rings,
+        )
+
+    # Handle --save-preset
+    if args.save_preset:
+        save_preset(args.save_preset, params)
+        sys.exit(0)
 
     # Validate parameters before generating the pot
     try:

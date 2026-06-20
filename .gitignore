@@ -50,3 +50,4 @@ Thumbs.db
 
 # Project output default
 flowerpots.step
+presets/*.json

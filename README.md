@@ -15,6 +15,23 @@ pip3 install -r requirements.txt
 python3 flowerpot.py --diameter 120 --height 100 --wall 3 --base 4 pot
 ```
 
+### Preset configurations
+```bash
+# List available presets (built-in and saved)
+python3 flowerpot.py --list-presets
+
+# Use built-in pot styles
+python3 flowerpot.py --preset succulent succulent_pot
+python3 flowerpot.py --preset herb herb_pot
+python3 flowerpot.py --preset tree tree_pot
+
+# Save current parameters as a named preset
+python3 flowerpot.py --diameter 150 --height 120 --drains 6 --save-preset my_large_pot
+
+# Use saved preset
+python3 flowerpot.py --preset my_large_pot loaded_pot
+```
+
 ### Available output formats
 ```bash
 # STL file (default, for 3D printing)
@@ -47,9 +64,18 @@ python3 flowerpot.py --summary --diameter 120 --height 100 pot
 | `--rings`          | 2               | Number of concentric bottom ventilation rings          |
 | `--format`         | stl             | Output format: step, stl, or all                       |
 | `--summary`        | false           | Export parameter summary as JSON file                  |
+| `--preset`         | -               | Use preset (built-in or saved preset name)             |
+| `--save-preset`    | -               | Save current parameters as a named preset              |
+| `--list-presets`   | false           | List all available presets and exit                    |
 | `filename`         | flowerpots.step | Output file path (extension added automatically)       |
 
 ## Features
+
+### Preset Configurations
+- **Built-in pot styles**: succulent, herb, and tree presets optimized for different plant types
+- **Custom presets**: Save and load your favorite parameter combinations
+- **Unified preset system**: Single command to use any preset (built-in or saved)
+- **Batch generation**: Easily reproduce favorite designs
 
 ### Output Options
 - **STL files** for 3D printing (default)
@@ -72,16 +98,19 @@ When using `--summary`, a JSON file is generated with:
 ## Example batch
 
 ```bash
-# Small succulent pot (STL)
+# Using built-in presets
+python3 flowerpot.py --preset succulent succulent_pot
+python3 flowerpot.py --preset herb --summary herb_with_summary
+python3 flowerpot.py --preset tree --format step large_tree_step
+
+# Save and use custom presets
+python3 flowerpot.py --diameter 150 --height 120 --drains 6 --save-preset my_custom
+python3 flowerpot.py --preset my_custom loaded_custom
+
+# Manual parameter examples
 python3 flowerpot.py --diameter 80 --height 60 --wall 2.5 --drain-diameter 6 small_stl
-
-# Large planter (STEP file)
 python3 flowerpot.py --format step --diameter 200 --height 150 --wall 5 large_step
-
-# Pot with custom drainage
 python3 flowerpot.py --diameter 120 --height 100 --drains 6 --drain-diameter 5 custom_drains
-
-# Ventilated pot with feet
 python3 flowerpot.py --diameter 120 --height 100 --foot 6 --rings 3 ventilated
 
 # Complete export with summary
@@ -101,6 +130,7 @@ The generator includes comprehensive error handling:
 - **STL files**: Ready for 3D printing slicers
 - **STEP files**: Compatible with CAD software (Fusion 360, SolidWorks, etc.)
 - **JSON summaries**: Human-readable parameter documentation
+- **Presets**: Saved in `presets/` directory for easy reuse and sharing
 
 ## License
 
