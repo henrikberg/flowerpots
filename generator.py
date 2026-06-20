@@ -1,9 +1,107 @@
 import cadquery as cq
 import argparse
+import json
 import logging
 import math
 import sys
 from pathlib import Path
+
+
+def export_parameter_summary(
+    filename: Path,
+    top_diameter: float,
+    bottom_diameter: float,
+    taper_angle: float,
+    height: float,
+    wall_thickness: float,
+    base_thickness: float,
+    drain_diameter: float,
+    number_of_drains: int,
+    rim_thickness: float,
+    rim_height: float,
+    foot_height: float,
+    foot_ring_count: int,
+) -> None:
+    """Export parameter summary to a JSON file."""
+    # Calculate derived dimensions
+    top_radius: float = top_diameter / 2.0
+    bottom_radius: float = bottom_diameter / 2.0 if bottom_diameter > 0 else top_radius - height * math.tan(math.radians(taper_angle))
+    inner_radius_top: float = top_radius - wall_thickness
+    inner_radius_bottom: float = bottom_radius - wall_thickness
+    
+    # Calculate approximate volumes (simplified)
+    outer_volume: float = (math.pi * height / 3.0) * (top_radius**2 + top_radius * bottom_radius + bottom_radius**2)
+    inner_volume: float = (math.pi * (height - base_thickness) / 3.0) * (inner_radius_top**2 + inner_radius_top * inner_radius_bottom + inner_radius_bottom**2) if inner_radius_bottom > 0 else 0
+    material_volume: float = outer_volume - inner_volume
+    
+    summary = {
+        "parameters": {
+            "top_diameter_mm": top_diameter,
+            "bottom_diameter_mm": bottom_diameter,
+            "taper_angle_degrees": taper_angle,
+            "height_mm": height,
+            "wall_thickness_mm": wall_thickness,
+            "base_thickness_mm": base_thickness,
+            "drain_diameter_mm": drain_diameter,
+            "number_of_drains": number_of_drains,
+            "rim_thickness_mm": rim_thickness,
+            "rim_height_mm": rim_height,
+            "foot_height_mm": foot_height,
+            "foot_ring_count": foot_ring_count,
+        },
+        "dimensions": {
+            "top_radius_mm": round(top_radius, 3),
+            "bottom_radius_mm": round(bottom_radius, 3),
+            "inner_radius_top_mm": round(inner_radius_top, 3),
+            "inner_radius_bottom_mm": round(inner_radius_bottom, 3) if inner_radius_bottom > 0 else 0,
+            "rim_outer_diameter_mm": round(top_diameter + 2 * rim_thickness, 3) if rim_thickness > 0 else top_diameter,
+        },
+        "volumes": {
+            "outer_volume_cm3": round(outer_volume / 1000.0, 2),
+            "inner_volume_cm3": round(inner_volume / 1000.0, 2) if inner_radius_bottom > 0 else 0,
+            "material_volume_cm3": round(material_volume / 1000.0, 2),
+            "water_capacity_ml": round(inner_volume / 1000.0, 0) if inner_radius_bottom > 0 else 0,
+        },
+        "printing_info": {
+            "recommended_layer_height_mm": "0.2-0.3",
+            "recommended_infill_percent": "15-25",
+            "supports_needed": foot_height > 0,
+            "estimated_print_time_hours": round(material_volume / 1000.0 * 0.1, 1),  # Rough estimate
+        },
+        "export_info": {
+            "format": "parametric_flowerpot_v1",
+            "generator": "flowerpots.py",
+            "timestamp": None,  # Could add timestamp if needed
+        }
+    }
+    
+    summary_filename = filename.with_suffix('.json')
+    try:
+        with open(summary_filename, 'w') as f:
+            json.dump(summary, f, indent=2)
+        logging.info(f"Exported parameter summary to {summary_filename}")
+    except Exception as e:
+        logging.error(f"Failed to export parameter summary: {e}")
+
+
+def export_step(pot: cq.Workplane, filename: Path) -> None:
+    """Export the pot as a STEP file."""
+    step_filename = filename.with_suffix('.step')
+    try:
+        cq.exporters.export(pot, str(step_filename), "STEP")
+        logging.info(f"Exported STEP file to {step_filename}")
+    except Exception as e:
+        logging.error(f"Failed to export STEP file: {e}")
+
+
+def export_stl(pot: cq.Workplane, filename: Path) -> None:
+    """Export the pot as an STL file for 3D printing."""
+    stl_filename = filename.with_suffix('.stl')
+    try:
+        cq.exporters.export(pot, str(stl_filename), "STL")
+        logging.info(f"Exported STL file to {stl_filename}")
+    except Exception as e:
+        logging.error(f"Failed to export STL file: {e}")
 
 
 def setup_logging() -> None:
@@ -348,7 +446,11 @@ def main() -> None:
     parser.add_argument("--rings", type=int, default=2, help="Number of concentric bottom ventilation rings.")
     parser.add_argument("--rim-thickness", type=float, default=2.0, help="Extra rim thickness in mm.")
     parser.add_argument("--rim-height", type=float, default=5.0, help="Rim height in mm.")
-    parser.add_argument("filename", type=Path, default=Path("flowerpots.step"), nargs="?", help="Output STEP file path.")
+    parser.add_argument("--format", choices=["step", "stl", "all"], default="stl", 
+                       help="Output format: stl (default), step, or all")
+    parser.add_argument("--summary", action="store_true", 
+                       help="Export parameter summary as JSON file")
+    parser.add_argument("filename", type=Path, default=Path("flowerpots.step"), nargs="?", help="Output file path.")
 
     try:
         args = parser.parse_args()
@@ -394,10 +496,32 @@ def main() -> None:
         )
 
         try:
-            cq.exporters.export(pot, str(args.filename))
-            logging.info(f"Exported flowerpot to {args.filename}")
+            # Export based on format choice
+            if args.format in ["step", "all"]:
+                export_step(pot, args.filename)
+            
+            if args.format in ["stl", "all"]:
+                export_stl(pot, args.filename)
+            
+            if args.summary:
+                export_parameter_summary(
+                    args.filename,
+                    top_diameter=args.diameter,
+                    bottom_diameter=args.bottom_diameter,
+                    taper_angle=args.taper,
+                    height=args.height,
+                    wall_thickness=args.wall,
+                    base_thickness=args.base,
+                    drain_diameter=args.drain_diameter,
+                    number_of_drains=args.drains,
+                    rim_thickness=args.rim_thickness,
+                    rim_height=args.rim_height,
+                    foot_height=args.foot,
+                    foot_ring_count=args.rings,
+                )
+                
         except Exception as e:
-            logging.error(f"Failed to export flowerpot to {args.filename}: {e}")
+            logging.error(f"Failed to export flowerpot: {e}")
             sys.exit(1)
     except Exception as e:
         logging.error(f"Failed to generate flowerpot: {e}")

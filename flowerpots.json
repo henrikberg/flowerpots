@@ -1,0 +1,40 @@
+{
+  "parameters": {
+    "top_diameter_mm": 120.0,
+    "bottom_diameter_mm": 0.0,
+    "taper_angle_degrees": 5.0,
+    "height_mm": 100.0,
+    "wall_thickness_mm": 3.0,
+    "base_thickness_mm": 4.0,
+    "drain_diameter_mm": 8.0,
+    "number_of_drains": 5,
+    "rim_thickness_mm": 5.0,
+    "rim_height_mm": 5.0,
+    "foot_height_mm": 3.0,
+    "foot_ring_count": 2
+  },
+  "dimensions": {
+    "top_radius_mm": 60.0,
+    "bottom_radius_mm": 51.251,
+    "inner_radius_top_mm": 57.0,
+    "inner_radius_bottom_mm": 48.251,
+    "rim_outer_diameter_mm": 130.0
+  },
+  "volumes": {
+    "outer_volume_cm3": 974.08,
+    "inner_volume_cm3": 837.17,
+    "material_volume_cm3": 136.91,
+    "water_capacity_ml": 837.0
+  },
+  "printing_info": {
+    "recommended_layer_height_mm": "0.2-0.3",
+    "recommended_infill_percent": "15-25",
+    "supports_needed": true,
+    "estimated_print_time_hours": 13.7
+  },
+  "export_info": {
+    "format": "parametric_flowerpot_v1",
+    "generator": "flowerpots.py",
+    "timestamp": null
+  }
+}
