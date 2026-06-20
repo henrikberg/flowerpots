@@ -32,6 +32,15 @@ python3 flowerpot.py --diameter 150 --height 120 --drains 6 --save-preset my_lar
 python3 flowerpot.py --preset my_large_pot loaded_pot
 ```
 
+### Interactive mode
+```bash
+# Launch interactive mode with guided parameter prompts
+python3 flowerpot.py --interactive
+
+# Interactive mode with custom filename
+python3 flowerpot.py --interactive my_custom_pot
+```
+
 ### Advanced geometry options
 ```bash
 # Different pot shapes
@@ -91,6 +100,7 @@ python3 flowerpot.py --summary --diameter 120 --height 100 pot
 | `--pattern-depth`  | 0.5       | Depth of decorative patterns (mm)                      |
 | `--modular`        | false     | Create stackable modular sections                      |
 | `--sections`       | 1         | Number of modular sections                             |
+| `--interactive`    | false     | Interactive mode with guided parameter prompts         |
 | `filename`         | flowerpot | Output file path (extension added automatically)       |
 
 ## Features
@@ -106,6 +116,9 @@ python3 flowerpot.py --summary --diameter 120 --height 100 pot
 - **Decorative patterns**: Lines, dots, and wave patterns with customizable depth
 - **Modular system**: Stackable sections with interlocking connectors
 - **Feature combinations**: Mix shapes, patterns, and modular designs
+
+### CLI Enhancements
+- **Interactive mode**: Guided parameter prompts with defaults and validation
 
 ### Output Options
 - **STL files** for 3D printing (default)
@@ -147,6 +160,10 @@ python3 flowerpot.py --modular --sections 3 --diameter 120 --height 150 stackabl
 
 # Combined features
 python3 flowerpot.py --shape square --pattern dots --modular --sections 2 complex_modular
+
+# Interactive mode examples
+python3 flowerpot.py --interactive
+python3 flowerpot.py --interactive custom_design
 
 # Manual parameter examples
 python3 flowerpot.py --diameter 80 --height 60 --wall 2.5 --drain-diameter 6 small_stl

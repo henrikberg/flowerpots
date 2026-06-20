@@ -825,6 +825,124 @@ def make_flowerpot(params: FlowerpotParams) -> cq.Workplane:
     return pot
 
 
+def interactive_mode() -> FlowerpotParams:
+    """Interactive mode to prompt user for parameters."""
+    print("🌸 Interactive Flowerpot Generator")
+    print("=" * 40)
+    
+    def get_float(prompt: str, default: float) -> float:
+        while True:
+            try:
+                value = input(f"{prompt} [{default}]: ").strip()
+                return float(value) if value else default
+            except ValueError:
+                print("Please enter a valid number.")
+    
+    def get_int(prompt: str, default: int) -> int:
+        while True:
+            try:
+                value = input(f"{prompt} [{default}]: ").strip()
+                return int(value) if value else default
+            except ValueError:
+                print("Please enter a valid integer.")
+    
+    def get_choice(prompt: str, choices: list[str], default: str) -> str:
+        while True:
+            value = input(f"{prompt} [{default}] ({', '.join(choices)}): ").strip()
+            if not value:
+                return default
+            if value in choices:
+                return value
+            print(f"Please choose from: {', '.join(choices)}")
+    
+    def get_bool(prompt: str, default: bool) -> bool:
+        while True:
+            value = input(f"{prompt} [{'y' if default else 'n'}]: ").strip().lower()
+            if not value:
+                return default
+            if value in ['y', 'yes', 'true', '1']:
+                return True
+            elif value in ['n', 'no', 'false', '0']:
+                return False
+            print("Please enter y/n or yes/no.")
+    
+    print("\n📏 Basic Dimensions:")
+    diameter = get_float("Top diameter (mm)", 120.0)
+    height = get_float("Height (mm)", 100.0)
+    wall = get_float("Wall thickness (mm)", 3.0)
+    base = get_float("Base thickness (mm)", 4.0)
+    
+    print("\n🕳️ Drainage:")
+    drain_diameter = get_float("Drain hole diameter (mm, 0 to disable)", 8.0)
+    drains = get_int("Number of drain holes", 4)
+    
+    print("\n📐 Shape & Style:")
+    shape = get_choice("Pot shape", ["circular", "square", "rectangular"], "circular")
+    width = 0.0
+    if shape == "rectangular":
+        width = get_float("Width for rectangular pot (mm, 0 = 0.7 × diameter)", 0.0)
+    
+    pattern = get_choice("Decorative pattern", ["none", "lines", "dots", "waves"], "none")
+    pattern_depth = 0.5
+    if pattern != "none":
+        pattern_depth = get_float("Pattern depth (mm)", 0.5)
+    
+    modular = get_bool("Create modular stackable sections", False)
+    sections = 1
+    if modular:
+        sections = get_int("Number of sections", 2)
+    
+    print("\n🎯 Advanced Options:")
+    bottom_diameter = get_float("Bottom diameter (mm, 0 = auto-calculate)", 0.0)
+    taper = get_float("Taper angle (degrees)", 5.0)
+    rim_thickness = get_float("Rim thickness (mm)", 2.0)
+    rim_height = get_float("Rim height (mm)", 5.0)
+    foot = get_float("Foot height (mm, 0 to disable)", 3.0)
+    rings = get_int("Number of foot rings", 2)
+    
+    print("\n📁 Output:")
+    format_choice = get_choice("Output format", ["stl", "step", "all"], "stl")
+    summary = get_bool("Export parameter summary", False)
+    
+    # Create the parameters object
+    params = FlowerpotParams(
+        top_diameter=diameter,
+        bottom_diameter=bottom_diameter,
+        taper_angle=taper,
+        height=height,
+        wall_thickness=wall,
+        base_thickness=base,
+        drain_diameter=drain_diameter,
+        number_of_drains=drains,
+        rim_thickness=rim_thickness,
+        rim_height=rim_height,
+        foot_height=foot,
+        foot_ring_count=rings,
+        shape=shape,
+        width=width,
+        pattern=pattern,
+        pattern_depth=pattern_depth,
+        modular=modular,
+        sections=sections,
+    )
+    
+    print(f"\n✅ Configuration complete!")
+    print(f"   Shape: {shape}")
+    if shape == "rectangular":
+        print(f"   Dimensions: {diameter}mm × {width}mm × {height}mm")
+    else:
+        print(f"   Dimensions: {diameter}mm diameter × {height}mm")
+    if pattern != "none":
+        print(f"   Pattern: {pattern} ({pattern_depth}mm depth)")
+    if modular:
+        print(f"   Modular: {sections} sections")
+    print(f"   Format: {format_choice}")
+    if summary:
+        print(f"   Summary: JSON file will be generated")
+    
+    return params, format_choice, summary
+
+
 def main() -> None:
     setup_logging()
     
@@ -864,6 +982,8 @@ def main() -> None:
                        help="Create stackable modular sections")
     parser.add_argument("--sections", type=int, default=1,
                        help="Number of modular sections")
+    parser.add_argument("--interactive", action="store_true",
+                       help="Interactive mode with parameter prompts")
     parser.add_argument("filename", type=Path, default=Path("flowerpot"), nargs="?", help="Output file path.")
 
     try:
@@ -878,31 +998,38 @@ def main() -> None:
         list_presets()
         sys.exit(0)
 
-    # Create parameters struct
-    if args.preset:
-        params = load_preset(args.preset)
-        logging.info(f"Using preset: {args.preset}")
+    # Handle interactive mode
+    if args.interactive:
+        params, format_choice, summary_choice = interactive_mode()
+        # Override args with interactive choices
+        args.format = format_choice
+        args.summary = summary_choice
     else:
-        params = FlowerpotParams(
-            top_diameter=args.diameter,
-            bottom_diameter=args.bottom_diameter,
-            taper_angle=args.taper,
-            height=args.height,
-            wall_thickness=args.wall,
-            base_thickness=args.base,
-            drain_diameter=args.drain_diameter,
-            number_of_drains=args.drains,
-            rim_thickness=args.rim_thickness,
-            rim_height=args.rim_height,
-            foot_height=args.foot,
-            foot_ring_count=args.rings,
-            shape=args.shape,
-            width=args.width,
-            pattern=args.pattern,
-            pattern_depth=args.pattern_depth,
-            modular=args.modular,
-            sections=args.sections,
-        )
+        # Create parameters struct
+        if args.preset:
+            params = load_preset(args.preset)
+            logging.info(f"Using preset: {args.preset}")
+        else:
+            params = FlowerpotParams(
+                top_diameter=args.diameter,
+                bottom_diameter=args.bottom_diameter,
+                taper_angle=args.taper,
+                height=args.height,
+                wall_thickness=args.wall,
+                base_thickness=args.base,
+                drain_diameter=args.drain_diameter,
+                number_of_drains=args.drains,
+                rim_thickness=args.rim_thickness,
+                rim_height=args.rim_height,
+                foot_height=args.foot,
+                foot_ring_count=args.rings,
+                shape=args.shape,
+                width=args.width,
+                pattern=args.pattern,
+                pattern_depth=args.pattern_depth,
+                modular=args.modular,
+                sections=args.sections,
+            )
 
     # Handle --save-preset
     if args.save_preset:

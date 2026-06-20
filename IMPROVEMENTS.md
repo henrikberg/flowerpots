@@ -37,9 +37,7 @@ This document outlines potential improvements for the parametric flowerpot gener
 ## Usability Improvements
 
 ### 7. CLI Enhancements
-- Add `--list-presets` command
 - Interactive mode with parameter prompts
-- Progress indicators for complex geometries
 
 ### 8. Documentation
 - Add visual examples for each parameter
