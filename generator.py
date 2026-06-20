@@ -5,13 +5,14 @@ from pathlib import Path
 
 
 def make_flowerpot(
-    outer_diameter: float = 120.0,
+    top_diameter: float = 120.0,
+    bottom_diameter: float = 0.0,
+    taper_angle: float = 5.0,
     height: float = 100.0,
     wall_thickness: float = 3.0,
     base_thickness: float = 4.0,
     drain_diameter: float = 8.0,
     number_of_drains: int = 1,
-    taper_angle: float = 5.0,
     rim_thickness: float = 2.0,
     rim_height: float = 5.0,
     foot_height: float = 3.0,
@@ -22,8 +23,12 @@ def make_flowerpot(
 
     Parameters
     ----------
-    outer_diameter
+    top_diameter
         Outer diameter of the pot at the top rim (mm).
+    bottom_diameter
+        Outer diameter of the pot at the bottom (mm). If 0, the taper will be used.
+    taper_angle
+        Draft angle of the outer wall in degrees (positive narrows toward the bottom).
     height
         Total height of the pot (mm).
     wall_thickness
@@ -34,8 +39,6 @@ def make_flowerpot(
         Diameter of each drainage hole (mm). Set to 0 to omit.
     number_of_drains
         Number of drainage holes. 1 centers the hole; >1 arranges holes in a circle.
-    taper_angle
-        Draft angle of the outer wall in degrees (positive narrows toward the bottom).
     rim_thickness
         Extra thickness added to the top rim (mm).
     rim_height
@@ -45,15 +48,25 @@ def make_flowerpot(
     foot_ring_count
         Number of concentric rings on the bottom for ventilation.
     """
-    radius = outer_diameter / 2.0
+
+    # Calculate taper factor
     taper = math.tan(math.radians(taper_angle))
 
     # Compute radii
-    bottom_radius = radius - height * taper
+    radius = top_diameter / 2.0
+    bottom_radius = bottom_diameter / 2.0 if bottom_diameter > 0 else radius - height * taper
     inner_radius_top = radius - wall_thickness
-    inner_radius_bottom = radius - height * taper - wall_thickness
+    inner_radius_bottom = bottom_radius - wall_thickness
     if inner_radius_bottom <= 0:
-        raise ValueError("Wall thickness too large for the chosen diameter/height/taper.")
+        min_inner = 0.5
+        wall_thickness = min(bottom_radius - min_inner, radius - min_inner)
+        wall_thickness = max(wall_thickness, 0.1)
+        inner_radius_bottom = bottom_radius - wall_thickness
+        inner_radius_top = radius - wall_thickness
+        print(
+            f"Warning: wall thickness too large for bottom radius; "
+            f"capping to {wall_thickness:.2f}."
+        )
 
     # Main pot body + rim profile revolved around Z axis
     body_profile = [
@@ -84,12 +97,26 @@ def make_flowerpot(
     # Bottom ventilation feet / rings
     if foot_height > 0 and foot_ring_count > 0:
         foot_ring_width = bottom_radius / foot_ring_count
-        if foot_ring_width <= foot_height * 2.0:
-            raise ValueError("Foot height too big for the number of foot rings.")
-        #innermost_outer_r = bottom_radius - (foot_ring_count - 1) * foot_ring_width
-        #if innermost_outer_r - foot_ring_width < 0:
-        #    raise ValueError("Foot rings too wide for the pot bottom.")
+        min_width = foot_height * 2.0
+        if foot_ring_width <= min_width:
+            max_rings = int(bottom_radius / min_width)
+            if max_rings >= bottom_radius / min_width:
+                max_rings -= 1
+            if max_rings < 1:
+                print(
+                    f"Warning: foot height {foot_height} is too large for "
+                    f"bottom radius {bottom_radius:.2f}; disabling feet."
+                )
+                foot_ring_count = 0
+            else:
+                print(
+                    f"Warning: foot height {foot_height} is too big for "
+                    f"{foot_ring_count} rings; reducing to {max_rings}."
+                )
+                foot_ring_count = max_rings
+                foot_ring_width = bottom_radius / foot_ring_count
 
+    if foot_height > 0 and foot_ring_count > 0:
         flare = foot_height * math.tan(math.radians(45))
 
         feet = None
@@ -146,13 +173,8 @@ def make_flowerpot(
     # Drainage holes
     if number_of_drains > 0 and drain_diameter > 0:
         hole_radius = drain_diameter / 2.0
-        if number_of_drains == 1:
-            holes = (
-                cq.Workplane("XY")
-                .circle(hole_radius)
-                .extrude(height)
-            )
-        else:
+
+        if number_of_drains > 1:
             # arrange holes in a circle around the center of the base
             drain_circle_radius = min(
                 drain_diameter * 2.0,
@@ -160,9 +182,41 @@ def make_flowerpot(
             )
             min_circle_radius = hole_radius / math.sin(math.pi / number_of_drains)
             if drain_circle_radius < min_circle_radius:
-                raise ValueError(
-                    "Drain diameter/number of drains too large for the pot base."
-                )
+                if drain_circle_radius <= hole_radius:
+                    print(
+                        f"Warning: drain diameter {drain_diameter} too large "
+                        f"for pot base; disabling drains."
+                    )
+                    number_of_drains = 0
+                else:
+                    max_drains = int(
+                        math.pi / math.asin(hole_radius / drain_circle_radius)
+                    )
+                    if max_drains < 1:
+                        print(
+                            f"Warning: drain diameter {drain_diameter} too large "
+                            f"for pot base; disabling drains."
+                        )
+                        number_of_drains = 0
+                    else:
+                        print(
+                            f"Warning: {number_of_drains} drains too large for "
+                            f"pot base; reducing to {max_drains}."
+                        )
+                        number_of_drains = max_drains
+
+        if number_of_drains == 1:
+            holes = (
+                cq.Workplane("XY")
+                .workplane(offset=-foot_height)
+                .circle(hole_radius)
+                .extrude(height)
+            )
+        elif number_of_drains > 1:
+            drain_circle_radius = min(
+                drain_diameter * 2.0,
+                inner_radius_bottom - hole_radius - 1.0,
+            )
             points = [
                 (
                     drain_circle_radius * math.cos(2 * math.pi * i / number_of_drains),
@@ -177,7 +231,11 @@ def make_flowerpot(
                 .circle(hole_radius)
                 .extrude(height)
             )
-        pot = pot.cut(holes)
+        else:
+            holes = None
+
+        if holes is not None:
+            pot = pot.cut(holes)
 
     return pot
 
@@ -185,6 +243,7 @@ def make_flowerpot(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a parametric flowerpot STEP file.")
     parser.add_argument("--diameter", type=float, default=120.0, help="Outer top diameter in mm.")
+    parser.add_argument("--bottom-diameter", type=float, default=0.0, help="Outer bottom diameter in mm.")
     parser.add_argument("--height", type=float, default=100.0, help="Total height in mm.")
     parser.add_argument("--wall", type=float, default=3.0, help="Wall thickness in mm.")
     parser.add_argument("--base", type=float, default=4.0, help="Base thickness in mm.")
@@ -200,13 +259,14 @@ def main() -> None:
     args = parser.parse_args()
 
     pot = make_flowerpot(
-        outer_diameter=args.diameter,
+        top_diameter=args.diameter,
+        bottom_diameter=args.bottom_diameter,
+        taper_angle=args.taper,
         height=args.height,
         wall_thickness=args.wall,
         base_thickness=args.base,
         drain_diameter=args.drain_diameter,
         number_of_drains=args.drains,
-        taper_angle=args.taper,
         rim_thickness=args.rim_thickness,
         rim_height=args.rim_height,
         foot_height=args.foot,
