@@ -3,9 +3,6 @@ import argparse
 import math
 from pathlib import Path
 
-from numpy import average
-
-
 def make_flowerpot(
     outer_diameter: float = 120.0,
     height: float = 100.0,
@@ -16,6 +13,9 @@ def make_flowerpot(
     taper_angle: float = 5.0,
     rim_thickness: float = 2.0,
     rim_height: float = 5.0,
+    foot_height: float = 5.0,
+    foot_ring_count: int = 1,
+    foot_ring_width: float = 8.0,
 ) -> cq.Workplane:
     """
     Generate a parametric flowerpot as a STEP file.
@@ -40,6 +40,12 @@ def make_flowerpot(
         Extra thickness added to the top rim (mm).
     rim_height
         Height of the reinforced rim (mm).
+    foot_height
+        Height of the bottom ventilation feet (mm). Set to 0 to omit.
+    foot_ring_count
+        Number of concentric rings on the bottom for ventilation.
+    foot_ring_width
+        Width of each bottom ventilation ring (mm).
     """
     radius = outer_diameter / 2.0
     taper = math.tan(math.radians(taper_angle))
@@ -116,6 +122,49 @@ def make_flowerpot(
             )
         pot = pot.cut(holes)
 
+    # Bottom ventilation feet / rings
+    if foot_height > 0 and foot_ring_count > 0 and foot_ring_width > 0:
+        bottom_radius = radius - height * taper
+
+        total_ring_width = foot_ring_count * foot_ring_width
+        if total_ring_width >= bottom_radius:
+            raise ValueError("Foot rings too wide for the pot bottom.")
+        ring_gap = (bottom_radius - total_ring_width) / (foot_ring_count + 1)
+
+        rings = []
+        for i in range(foot_ring_count):
+            outer_r = bottom_radius - base_thickness - i * (foot_ring_width + ring_gap)
+            inner_r = outer_r - foot_ring_width
+            ring = (
+                cq.Workplane("XY")
+                .circle(outer_r)
+                .circle(inner_r)
+                .extrude(-foot_height)
+            )
+            rings.append(ring)
+
+        feet = rings[0]
+        for ring in rings[1:]:
+            feet = feet.union(ring)
+
+        # cut radial slits through the feet, one per drain
+        if number_of_drains > 0:
+            slit_width = drain_diameter if drain_diameter > 0 else 4.0
+            slit_length = bottom_radius + 2
+            slit = (
+                cq.Workplane("XY")
+                .box(slit_length, slit_width, foot_height + 2)
+                .translate((slit_length / 2, 0, -foot_height / 2 - 1))
+            )
+            for i in range(number_of_drains):
+                angle = 2 * math.pi * i / number_of_drains
+                slit_rotated = slit.rotate(
+                    (0, 0, 0), (0, 0, 1), math.degrees(angle)
+                )
+                feet = feet.cut(slit_rotated)
+
+        pot = pot.union(feet)
+
     return pot
 
 
@@ -128,6 +177,9 @@ def main() -> None:
     parser.add_argument("--drain-diameter", type=float, default=8.0, help="Drainage hole diameter in mm (0 to disable).")
     parser.add_argument("--number-of-drains", type=int, default=4, help="Number of drainage holes.")
     parser.add_argument("--taper", type=float, default=5.0, help="Wall taper angle in degrees.")
+    parser.add_argument("--foot-height", type=float, default=5.0, help="Height of bottom ventilation feet in mm (0 to disable).")
+    parser.add_argument("--foot-ring-count", type=int, default=2, help="Number of concentric bottom ventilation rings.")
+    parser.add_argument("--foot-ring-width", type=float, default=8.0, help="Width of each bottom ventilation ring in mm.")
     parser.add_argument("--rim-thickness", type=float, default=2.0, help="Extra rim thickness in mm.")
     parser.add_argument("--rim-height", type=float, default=5.0, help="Rim height in mm.")
     parser.add_argument("--output", type=Path, default=Path("flowerpots.step"), help="Output STEP file path.")
@@ -144,6 +196,9 @@ def main() -> None:
         taper_angle=args.taper,
         rim_thickness=args.rim_thickness,
         rim_height=args.rim_height,
+        foot_height=args.foot_height,
+        foot_ring_count=args.foot_ring_count,
+        foot_ring_width=args.foot_ring_width,
     )
 
     cq.exporters.export(pot, str(args.output))
