@@ -1,7 +1,87 @@
 import cadquery as cq
 import argparse
 import math
+import sys
 from pathlib import Path
+
+
+def validate_parameters(
+    top_diameter: float,
+    bottom_diameter: float,
+    taper_angle: float,
+    height: float,
+    wall_thickness: float,
+    base_thickness: float,
+    drain_diameter: float,
+    number_of_drains: int,
+    rim_thickness: float,
+    rim_height: float,
+    foot_height: float,
+    foot_ring_count: int,
+) -> None:
+    """
+    Validate input parameters and raise ValueError for invalid combinations.
+    """
+    
+    # Check for negative values and zero heights
+    if top_diameter <= 0:
+        raise ValueError("Top diameter must be positive")
+    if bottom_diameter < 0:
+        raise ValueError("Bottom diameter cannot be negative")
+    if height <= 0:
+        raise ValueError("Height must be positive")
+    if wall_thickness <= 0:
+        raise ValueError("Wall thickness must be positive")
+    if base_thickness <= 0:
+        raise ValueError("Base thickness must be positive")
+    if drain_diameter < 0:
+        raise ValueError("Drain diameter cannot be negative")
+    if number_of_drains < 0:
+        raise ValueError("Number of drains cannot be negative")
+    if rim_thickness < 0:
+        raise ValueError("Rim thickness cannot be negative")
+    if rim_height < 0:
+        raise ValueError("Rim height cannot be negative")
+    if foot_height < 0:
+        raise ValueError("Foot height cannot be negative")
+    if foot_ring_count < 0:
+        raise ValueError("Foot ring count cannot be negative")
+    
+    # Check for reasonable angle ranges
+    if abs(taper_angle) > 45:
+        raise ValueError("Taper angle should be between -45 and 45 degrees")
+    
+    # Check diameter ratios
+    if bottom_diameter > 0 and bottom_diameter > top_diameter:
+        raise ValueError("Bottom diameter cannot exceed top diameter")
+    
+    # Calculate bottom radius based on taper if not specified
+    radius = top_diameter / 2.0
+    taper = math.tan(math.radians(taper_angle))
+    bottom_radius = bottom_diameter / 2.0 if bottom_diameter > 0 else radius - height * taper
+    
+    if bottom_radius <= 0:
+        raise ValueError("Calculated bottom radius is non-positive - reduce taper angle or increase top diameter")
+    
+    # Check wall thickness vs bottom radius
+    min_bottom_radius = wall_thickness + 1.0  # Leave at least 1mm inner radius
+    if bottom_radius < min_bottom_radius:
+        raise ValueError(f"Bottom radius too small for wall thickness. Minimum bottom diameter: {min_bottom_radius * 2:.1f}mm")
+    
+    # Check drain diameter vs pot size
+    if drain_diameter > 0 and number_of_drains > 0:
+        inner_radius_bottom = bottom_radius - wall_thickness
+        max_drain_diameter = inner_radius_bottom * 0.8  # Don't exceed 80% of inner radius
+        if drain_diameter > max_drain_diameter:
+            raise ValueError(f"Drain diameter too large for pot size. Maximum: {max_drain_diameter:.1f}mm")
+    
+    # Check rim dimensions
+    if rim_height > height * 0.3:  # Rim shouldn't be more than 30% of total height
+        raise ValueError("Rim height too large relative to total height")
+    
+    # Check foot dimensions
+    if foot_height > base_thickness:
+        raise ValueError("Foot height cannot exceed base thickness")
 
 
 def make_flowerpot(
@@ -257,6 +337,26 @@ def main() -> None:
     parser.add_argument("filename", type=Path, default=Path("flowerpots.step"), nargs="?", help="Output STEP file path.")
 
     args = parser.parse_args()
+
+    # Validate parameters before generating the pot
+    try:
+        validate_parameters(
+            top_diameter=args.diameter,
+            bottom_diameter=args.bottom_diameter,
+            taper_angle=args.taper,
+            height=args.height,
+            wall_thickness=args.wall,
+            base_thickness=args.base,
+            drain_diameter=args.drain_diameter,
+            number_of_drains=args.drains,
+            rim_thickness=args.rim_thickness,
+            rim_height=args.rim_height,
+            foot_height=args.foot,
+            foot_ring_count=args.rings,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     pot = make_flowerpot(
         top_diameter=args.diameter,
