@@ -50,49 +50,38 @@ def make_flowerpot(
     radius = outer_diameter / 2.0
     taper = math.tan(math.radians(taper_angle))
 
-    # Outer shell with draft taper
-    outer = (
-        cq.Workplane("XY")
-        .circle(radius - height * taper)
-        .workplane(offset=height)
-        .circle(radius)
-        .loft()
-    )
-
-    # Hollow out the interior
+    # Compute radii
+    bottom_radius = radius - height * taper
     inner_radius_top = radius - wall_thickness
     inner_radius_bottom = radius - height * taper - wall_thickness
     if inner_radius_bottom <= 0:
         raise ValueError("Wall thickness too large for the chosen diameter/height/taper.")
 
-    inner = (
-        cq.Workplane("XY")
-        .workplane(offset=base_thickness)
-        .circle(inner_radius_bottom)
-        .workplane(offset=height - base_thickness)
-        .circle(inner_radius_top)
-        .loft()
-    )
-
-    # Reinforce the rim with a max 45° outer taper for 3D printing
+    # Main pot body + rim profile revolved around Z axis
+    body_profile = [
+        (bottom_radius, 0),
+        (radius, height),
+    ]
     if rim_thickness > 0 and rim_height > 0:
         top_outer = radius + rim_thickness
-        top_inner = radius
         bottom_outer = max(radius + rim_thickness - rim_height, radius)
-        bottom_inner = radius
-        rim = (
-            cq.Workplane("XY")
-            .workplane(offset=height - rim_height)
-            .circle(bottom_outer)
-            .circle(bottom_inner)
-            .workplane(offset=rim_height)
-            .circle(top_outer)
-            .circle(top_inner)
-            .loft()
-        )
-        outer = outer.union(rim)
+        body_profile.append((top_outer, height))
+        body_profile.append((bottom_outer, height - rim_height))
+        if bottom_outer > radius:
+            body_profile.append((radius, height - rim_height))
+    body_profile.extend([
+        (inner_radius_top, height),
+        (inner_radius_bottom, base_thickness),
+        (0, base_thickness),
+        (0, 0),
+    ])
 
-    pot = outer.cut(inner)
+    pot = (
+        cq.Workplane("XZ")
+        .polyline(body_profile)
+        .close()
+        .revolve()
+    )
 
     # Drainage holes
     if number_of_drains > 0 and drain_diameter > 0:
@@ -131,33 +120,39 @@ def make_flowerpot(
 
     # Bottom ventilation feet / rings
     if foot_height > 0 and foot_ring_count > 0 and foot_ring_width > 0:
-        bottom_radius = radius - height * taper
-
         total_ring_width = foot_ring_count * foot_ring_width
         if total_ring_width >= bottom_radius:
             raise ValueError("Foot rings too wide for the pot bottom.")
-        ring_gap = (bottom_radius - total_ring_width) / (foot_ring_count + 1)
+        if foot_ring_width <= foot_height * 2.0:
+            raise ValueError("Foot height too small for the foot ring width.")
+        innermost_outer_r = bottom_radius - (foot_ring_count - 1) * foot_ring_width
+        if innermost_outer_r - foot_ring_width <= 0:
+            raise ValueError("Foot rings too wide for the pot bottom.")
 
-        rings = []
+        flare = foot_height * math.tan(math.radians(45))
+
+        feet = None
         for i in range(foot_ring_count):
-            outer_r = bottom_radius - base_thickness - i * (foot_ring_width + ring_gap)
+            outer_r = bottom_radius - i * foot_ring_width
             inner_r = outer_r - foot_ring_width
+            ring_profile = [
+                (outer_r, 0),
+                (outer_r - flare, -foot_height),
+                (inner_r + flare, -foot_height),
+                (inner_r, 0),
+            ]
             ring = (
-                cq.Workplane("XY")
-                .circle(outer_r)
-                .circle(inner_r)
-                .extrude(-foot_height)
+                cq.Workplane("XZ")
+                .polyline(ring_profile)
+                .close()
+                .revolve()
             )
-            rings.append(ring)
-
-        feet = rings[0]
-        for ring in rings[1:]:
-            feet = feet.union(ring)
+            feet = ring if feet is None else feet.union(ring)
 
         # cut radial slits through the feet, one per drain
-        if number_of_drains > 0:
+        if number_of_drains > 0 and feet is not None:
             slit_width = drain_diameter if drain_diameter > 0 else 4.0
-            slit_length = bottom_radius + 2
+            slit_length = bottom_radius + flare + 2
             slit = (
                 cq.Workplane("XY")
                 .box(slit_length, slit_width, foot_height + 2)
@@ -184,7 +179,7 @@ def main() -> None:
     parser.add_argument("--drain-diameter", type=float, default=8.0, help="Drainage hole diameter in mm (0 to disable).")
     parser.add_argument("--number-of-drains", type=int, default=4, help="Number of drainage holes.")
     parser.add_argument("--taper", type=float, default=5.0, help="Wall taper angle in degrees.")
-    parser.add_argument("--foot-height", type=float, default=5.0, help="Height of bottom ventilation feet in mm (0 to disable).")
+    parser.add_argument("--foot-height", type=float, default=3.0, help="Height of bottom ventilation feet in mm (0 to disable).")
     parser.add_argument("--foot-ring-count", type=int, default=2, help="Number of concentric bottom ventilation rings.")
     parser.add_argument("--foot-ring-width", type=float, default=8.0, help="Width of each bottom ventilation ring in mm.")
     parser.add_argument("--rim-thickness", type=float, default=2.0, help="Extra rim thickness in mm.")
