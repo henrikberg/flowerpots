@@ -142,15 +142,15 @@ def make_flowerpot(
     """
 
     # Calculate taper factor
-    taper = math.tan(math.radians(taper_angle))
+    taper: float = math.tan(math.radians(taper_angle))
 
     # Compute radii
-    radius = top_diameter / 2.0
-    bottom_radius = bottom_diameter / 2.0 if bottom_diameter > 0 else radius - height * taper
-    inner_radius_top = radius - wall_thickness
-    inner_radius_bottom = bottom_radius - wall_thickness
+    radius: float = top_diameter / 2.0
+    bottom_radius: float = bottom_diameter / 2.0 if bottom_diameter > 0 else radius - height * taper
+    inner_radius_top: float = radius - wall_thickness
+    inner_radius_bottom: float = bottom_radius - wall_thickness
     if inner_radius_bottom <= 0:
-        min_inner = 0.5
+        min_inner: float = 0.5
         wall_thickness = min(bottom_radius - min_inner, radius - min_inner)
         wall_thickness = max(wall_thickness, 0.1)
         inner_radius_bottom = bottom_radius - wall_thickness
@@ -161,13 +161,13 @@ def make_flowerpot(
         )
 
     # Main pot body + rim profile revolved around Z axis
-    body_profile = [
+    body_profile: list[tuple[float, float]] = [
         (bottom_radius, 0),
         (radius, height),
     ]
     if rim_thickness > 0 and rim_height > 0:
-        top_outer = radius + rim_thickness
-        bottom_outer = max(radius + rim_thickness - rim_height, radius)
+        top_outer: float = radius + rim_thickness
+        bottom_outer: float = max(radius + rim_thickness - rim_height, radius)
         body_profile.append((top_outer, height))
         body_profile.append((bottom_outer, height - rim_height))
         if bottom_outer > radius:
@@ -179,7 +179,7 @@ def make_flowerpot(
         (0, 0),
     ])
 
-    pot = (
+    pot: cq.Workplane = (
         cq.Workplane("XZ")
         .polyline(body_profile)
         .close()
@@ -188,10 +188,10 @@ def make_flowerpot(
 
     # Bottom ventilation feet / rings
     if foot_height > 0 and foot_ring_count > 0:
-        foot_ring_width = bottom_radius / foot_ring_count
-        min_width = foot_height * 2.0
+        foot_ring_width: float = bottom_radius / foot_ring_count
+        min_width: float = foot_height * 2.0
         if foot_ring_width <= min_width:
-            max_rings = int(bottom_radius / min_width)
+            max_rings: int = int(bottom_radius / min_width)
             if max_rings >= bottom_radius / min_width:
                 max_rings -= 1
             if max_rings < 1:
@@ -231,11 +231,11 @@ def make_flowerpot(
 
         # cut radial slits through the feet, one per drain
         if number_of_drains > 0 and feet is not None:
-            slit_width = 0.0
-            slit_length = bottom_radius + flare + 2
+            slit_width: float = 0.0
+            slit_length: float = bottom_radius + flare + 2
 
-            half_top = slit_width / 2.0
-            half_bottom = half_top + flare
+            half_top: float = slit_width / 2.0
+            half_bottom: float = half_top + flare
             slit_profile = [
                 (half_top, 1),
                 (half_top, 0),
@@ -254,8 +254,8 @@ def make_flowerpot(
                 #.translate((slit_length / 2, 0, 0))
             )
             for i in range(number_of_drains):
-                angle = 2 * math.pi * i / number_of_drains
-                slit_rotated = slit.rotate(
+                angle: float = 2 * math.pi * i / number_of_drains
+                slit_rotated: cq.Workplane = slit.rotate(
                     (0, 0, 0), (0, 0, 1), math.degrees(angle)
                 )
                 feet = feet.cut(slit_rotated)
@@ -264,15 +264,15 @@ def make_flowerpot(
 
     # Drainage holes
     if number_of_drains > 0 and drain_diameter > 0:
-        hole_radius = drain_diameter / 2.0
+        hole_radius: float = drain_diameter / 2.0
 
         if number_of_drains > 1:
             # arrange holes in a circle around the center of the base
-            drain_circle_radius = min(
+            drain_circle_radius: float = min(
                 drain_diameter * 2.0,
                 inner_radius_bottom - hole_radius - 1.0,
             )
-            min_circle_radius = hole_radius / math.sin(math.pi / number_of_drains)
+            min_circle_radius: float = hole_radius / math.sin(math.pi / number_of_drains)
             if drain_circle_radius < min_circle_radius:
                 if drain_circle_radius <= hole_radius:
                     logging.warning(
@@ -281,7 +281,7 @@ def make_flowerpot(
                     )
                     number_of_drains = 0
                 else:
-                    max_drains = int(
+                    max_drains: int = int(
                         math.pi / math.asin(hole_radius / drain_circle_radius)
                     )
                     if max_drains < 1:
@@ -309,7 +309,7 @@ def make_flowerpot(
                 drain_diameter * 2.0,
                 inner_radius_bottom - hole_radius - 1.0,
             )
-            points = [
+            points: list[tuple[float, float]] = [
                 (
                     drain_circle_radius * math.cos(2 * math.pi * i / number_of_drains),
                     drain_circle_radius * math.sin(2 * math.pi * i / number_of_drains),
