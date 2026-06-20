@@ -3,6 +3,7 @@ import argparse
 import math
 from pathlib import Path
 
+
 def make_flowerpot(
     outer_diameter: float = 120.0,
     height: float = 100.0,
@@ -188,13 +189,13 @@ def main() -> None:
     parser.add_argument("--wall", type=float, default=3.0, help="Wall thickness in mm.")
     parser.add_argument("--base", type=float, default=4.0, help="Base thickness in mm.")
     parser.add_argument("--drain-diameter", type=float, default=8.0, help="Drainage hole diameter in mm (0 to disable).")
-    parser.add_argument("--number-of-drains", type=int, default=4, help="Number of drainage holes.")
+    parser.add_argument("--drains", type=int, default=4, help="Number of drainage holes.")
     parser.add_argument("--taper", type=float, default=5.0, help="Wall taper angle in degrees.")
-    parser.add_argument("--foot-height", type=float, default=3.0, help="Height of bottom ventilation feet in mm (0 to disable).")
-    parser.add_argument("--foot-ring-count", type=int, default=2, help="Number of concentric bottom ventilation rings.")
+    parser.add_argument("--foot", type=float, default=3.0, help="Height of bottom ventilation feet in mm (0 to disable).")
+    parser.add_argument("--rings", type=int, default=2, help="Number of concentric bottom ventilation rings.")
     parser.add_argument("--rim-thickness", type=float, default=2.0, help="Extra rim thickness in mm.")
     parser.add_argument("--rim-height", type=float, default=5.0, help="Rim height in mm.")
-    parser.add_argument("--output", type=Path, default=Path("flowerpots.step"), help="Output STEP file path.")
+    parser.add_argument("filename", type=Path, default=Path("flowerpots.step"), nargs="?", help="Output STEP file path.")
 
     args = parser.parse_args()
 
@@ -204,16 +205,16 @@ def main() -> None:
         wall_thickness=args.wall,
         base_thickness=args.base,
         drain_diameter=args.drain_diameter,
-        number_of_drains=args.number_of_drains,
+        number_of_drains=args.drains,
         taper_angle=args.taper,
         rim_thickness=args.rim_thickness,
         rim_height=args.rim_height,
-        foot_height=args.foot_height,
-        foot_ring_count=args.foot_ring_count,
+        foot_height=args.foot,
+        foot_ring_count=args.rings,
     )
 
-    cq.exporters.export(pot, str(args.output))
-    print(f"Exported flowerpot to {args.output}")
+    cq.exporters.export(pot, str(args.filename))
+    print(f"Exported flowerpot to {args.filename}")
 
 
 if __name__ == "__main__":
