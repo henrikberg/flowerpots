@@ -32,6 +32,15 @@ python3 flowerpot.py --diameter 150 --height 120 --drains 6 --save-preset my_lar
 python3 flowerpot.py --preset my_large_pot loaded_pot
 ```
 
+### 3D printing guidance
+```bash
+# Show printing recommendations and material usage
+python3 flowerpot.py --print-guidance --diameter 100 --height 80
+
+# Get guidance for complex designs
+python3 flowerpot.py --print-guidance --shape square --pattern dots --modular --sections 2
+```
+
 ### Interactive mode
 ```bash
 # Launch interactive mode with guided parameter prompts
@@ -101,6 +110,7 @@ python3 flowerpot.py --summary --diameter 120 --height 100 pot
 | `--modular`        | false     | Create stackable modular sections                      |
 | `--sections`       | 1         | Number of modular sections                             |
 | `--interactive`    | false     | Interactive mode with guided parameter prompts         |
+| `--print-guidance` | false     | Show 3D printing recommendations and material usage     |
 | `filename`         | flowerpot | Output file path (extension added automatically)       |
 
 ## Features
@@ -119,6 +129,13 @@ python3 flowerpot.py --summary --diameter 120 --height 100 pot
 
 ### CLI Enhancements
 - **Interactive mode**: Guided parameter prompts with defaults and validation
+
+### 3D Printing Guidance
+- **Material estimation**: Accurate volume, weight, and cost calculations
+- **Print time estimation**: Rough time estimates based on complexity
+- **Optimized settings**: Layer height, infill, speed recommendations
+- **Feature-specific advice**: Tailored recommendations for patterns, modular designs, etc.
+- **Material selection**: PLA vs PETG recommendations based on design
 
 ### Output Options
 - **STL files** for 3D printing (default)
@@ -164,6 +181,10 @@ python3 flowerpot.py --shape square --pattern dots --modular --sections 2 comple
 # Interactive mode examples
 python3 flowerpot.py --interactive
 python3 flowerpot.py --interactive custom_design
+
+# 3D printing guidance examples
+python3 flowerpot.py --print-guidance --diameter 100 --height 80
+python3 flowerpot.py --print-guidance --shape rectangular --pattern lines
 
 # Manual parameter examples
 python3 flowerpot.py --diameter 80 --height 60 --wall 2.5 --drain-diameter 6 small_stl

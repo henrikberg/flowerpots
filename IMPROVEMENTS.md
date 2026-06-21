@@ -36,11 +36,10 @@ This document outlines potential improvements for the parametric flowerpot gener
 
 ## Usability Improvements
 
-### 7. CLI Enhancements
+### 7. CLI Enhancements ✅
 - Interactive mode with parameter prompts
 
-### 8. Documentation
-- Add visual examples for each parameter
+### 8. 3D Printing Guidance
 - Include printing recommendations
 - Material usage estimation
 
@@ -48,6 +47,9 @@ This document outlines potential improvements for the parametric flowerpot gener
 - Unit tests for edge cases
 - Geometry validation tests
 - Parameter boundary testing
+
+### 10. Documentation
+- Add visual examples for each parameter
 
 ## Implementation Priority
 

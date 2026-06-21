@@ -189,6 +189,129 @@ def save_preset(preset_name: str, params: FlowerpotParams) -> None:
         logging.error(f"Failed to save preset: {e}")
 
 
+def calculate_printing_guidance(params: FlowerpotParams) -> dict:
+    """Calculate 3D printing recommendations and material usage."""
+    import math
+    
+    # Calculate approximate volume (simplified for different shapes)
+    if params.shape == "circular":
+        # Approximate as frustum of cone
+        radius_top = params.top_diameter / 2
+        radius_bottom = params.bottom_diameter / 2 if params.bottom_diameter > 0 else radius_top - params.height * math.tan(math.radians(params.taper_angle))
+        volume = (1/3) * math.pi * params.height * (radius_top**2 + radius_top*radius_bottom + radius_bottom**2)
+        # Subtract inner volume
+        inner_radius_top = radius_top - params.wall_thickness
+        inner_radius_bottom = radius_bottom - params.wall_thickness
+        inner_height = params.height - params.base_thickness
+        inner_volume = (1/3) * math.pi * inner_height * (inner_radius_top**2 + inner_radius_top*inner_radius_bottom + inner_radius_bottom**2)
+        volume -= inner_volume
+    elif params.shape == "square":
+        # Approximate as frustum of square pyramid
+        size_top = params.top_diameter
+        size_bottom = params.bottom_diameter if params.bottom_diameter > 0 else size_top - 2 * params.height * math.tan(math.radians(params.taper_angle))
+        volume = (1/3) * params.height * (size_top**2 + size_top*size_bottom + size_bottom**2)
+        # Subtract inner volume
+        inner_size_top = size_top - 2 * params.wall_thickness
+        inner_size_bottom = size_bottom - 2 * params.wall_thickness
+        inner_height = params.height - params.base_thickness
+        inner_volume = (1/3) * inner_height * (inner_size_top**2 + inner_size_top*inner_size_bottom + inner_size_bottom**2)
+        volume -= inner_volume
+    else:  # rectangular
+        length = params.top_diameter
+        width = params.width if params.width > 0 else length * 0.7
+        volume = length * width * params.height
+        # Subtract inner volume
+        inner_length = length - 2 * params.wall_thickness
+        inner_width = width - 2 * params.wall_thickness
+        inner_height = params.height - params.base_thickness
+        inner_volume = inner_length * inner_width * inner_height
+        volume -= inner_volume
+    
+    # Convert to cm³ for material estimation
+    volume_cm3 = volume / 1000
+    
+    # Material estimation (PLA density ~1.24 g/cm³)
+    material_density = 1.24  # g/cm³ for PLA
+    material_weight = volume_cm3 * material_density
+    
+    # Printing recommendations based on size and features
+    recommendations = []
+    
+    # Layer height recommendation
+    if params.wall_thickness < 2.0:
+        recommendations.append("Use 0.1mm layer height for better detail with thin walls")
+    elif params.wall_thickness > 4.0:
+        recommendations.append("Use 0.2mm layer height for faster printing with thick walls")
+    else:
+        recommendations.append("Use 0.15mm layer height for good balance of speed and detail")
+    
+    # Infill recommendation
+    if params.height > 150:
+        recommendations.append("Use 20% infill for tall pots to reduce warping")
+    elif params.pattern != "none":
+        recommendations.append("Use 15% infill to highlight decorative patterns")
+    else:
+        recommendations.append("Use 25% infill for standard strength")
+    
+    # Support recommendation
+    if params.rim_height > 10 or params.foot_height > 5:
+        recommendations.append("Enable supports for overhangs (rim and feet)")
+    else:
+        recommendations.append("No supports needed for this design")
+    
+    # Print speed recommendation
+    if params.drain_diameter < 4:
+        recommendations.append("Reduce print speed to 30mm/s for small drain holes")
+    elif params.shape == "rectangular":
+        recommendations.append("Use 40mm/s print speed for rectangular shapes")
+    else:
+        recommendations.append("Use 50mm/s print speed for standard printing")
+    
+    # Bed adhesion recommendation
+    if params.bottom_diameter > 150 or params.top_diameter > 150:
+        recommendations.append("Use brim or raft for large base area")
+    else:
+        recommendations.append("Use skirt for bed adhesion")
+    
+    # Material recommendation
+    if params.foot_height > 0:
+        recommendations.append("Consider PETG for better durability with feet")
+    else:
+        recommendations.append("PLA recommended for most applications")
+    
+    # Special considerations
+    if params.modular and params.sections > 1:
+        recommendations.append("Print modular sections individually for best quality")
+        recommendations.append("Test fit connections before printing full set")
+    
+    if params.pattern != "none":
+        recommendations.append("Use slower print speed for pattern details")
+        recommendations.append("Consider using 0.4mm nozzle for better pattern resolution")
+    
+    # Printing time estimation (rough calculation)
+    # Based on typical speeds: 50mm/s, 0.15mm layer height, 25% infill
+    surface_area = 2 * math.pi * (params.top_diameter/2) * params.height if params.shape == "circular" else 2 * (params.top_diameter + params.width) * params.height
+    estimated_time_minutes = (volume_cm3 * 2.5) + (surface_area / 1000)  # Very rough estimate
+    
+    # Cost estimation
+    pla_cost_per_kg = 20  # $20 per kg typical
+    estimated_cost = (material_weight / 1000) * pla_cost_per_kg
+    
+    return {
+        "volume_cm3": round(volume_cm3, 2),
+        "material_weight_g": round(material_weight, 2),
+        "estimated_time_minutes": round(estimated_time_minutes, 0),
+        "estimated_cost_usd": round(estimated_cost, 2),
+        "recommendations": recommendations,
+        "layer_height_mm": 0.15 if 2.0 <= params.wall_thickness <= 4.0 else (0.1 if params.wall_thickness < 2.0 else 0.2),
+        "infill_percent": 20 if params.height > 150 else (15 if params.pattern != "none" else 25),
+        "supports_needed": params.rim_height > 10 or params.foot_height > 5,
+        "print_speed_mm_s": 30 if params.drain_diameter < 4 else (40 if params.shape == "rectangular" else 50),
+        "bed_adhesion": "brim" if params.bottom_diameter > 150 or params.top_diameter > 150 else "skirt",
+        "recommended_material": "PETG" if params.foot_height > 0 else "PLA"
+    }
+
+
 def export_parameter_summary(filename: Path, params: FlowerpotParams) -> None:
     """Export parameter summary to a JSON file."""
     # Calculate derived dimensions
@@ -201,6 +324,9 @@ def export_parameter_summary(filename: Path, params: FlowerpotParams) -> None:
     outer_volume: float = (math.pi * params.height / 3.0) * (top_radius**2 + top_radius * bottom_radius + bottom_radius**2)
     inner_volume: float = (math.pi * (params.height - params.base_thickness) / 3.0) * (inner_radius_top**2 + inner_radius_top * inner_radius_bottom + inner_radius_bottom**2) if inner_radius_bottom > 0 else 0
     material_volume: float = outer_volume - inner_volume
+    
+    # Get 3D printing guidance
+    printing_guidance = calculate_printing_guidance(params)
     
     summary = {
         "parameters": {
@@ -216,6 +342,12 @@ def export_parameter_summary(filename: Path, params: FlowerpotParams) -> None:
             "rim_height_mm": params.rim_height,
             "foot_height_mm": params.foot_height,
             "foot_ring_count": params.foot_ring_count,
+            "shape": params.shape,
+            "width_mm": params.width if params.width > 0 else params.top_diameter * 0.7,
+            "pattern": params.pattern,
+            "pattern_depth_mm": params.pattern_depth,
+            "modular": params.modular,
+            "sections": params.sections,
         },
         "dimensions": {
             "top_radius_mm": round(top_radius, 3),
@@ -230,11 +362,18 @@ def export_parameter_summary(filename: Path, params: FlowerpotParams) -> None:
             "material_volume_cm3": round(material_volume / 1000.0, 2),
             "water_capacity_ml": round(inner_volume / 1000.0, 0) if inner_radius_bottom > 0 else 0,
         },
-        "printing_info": {
-            "recommended_layer_height_mm": "0.2-0.3",
-            "recommended_infill_percent": "15-25",
-            "supports_needed": params.foot_height > 0,
-            "estimated_print_time_hours": round(material_volume / 1000.0 * 0.1, 1),  # Rough estimate
+        "printing_guidance": {
+            "volume_cm3": printing_guidance["volume_cm3"],
+            "material_weight_g": printing_guidance["material_weight_g"],
+            "estimated_time_minutes": printing_guidance["estimated_time_minutes"],
+            "estimated_cost_usd": printing_guidance["estimated_cost_usd"],
+            "layer_height_mm": printing_guidance["layer_height_mm"],
+            "infill_percent": printing_guidance["infill_percent"],
+            "supports_needed": printing_guidance["supports_needed"],
+            "print_speed_mm_s": printing_guidance["print_speed_mm_s"],
+            "bed_adhesion": printing_guidance["bed_adhesion"],
+            "recommended_material": printing_guidance["recommended_material"],
+            "recommendations": printing_guidance["recommendations"],
         },
         "export_info": {
             "format": "parametric_flowerpot_v1",
@@ -984,6 +1123,8 @@ def main() -> None:
                        help="Number of modular sections")
     parser.add_argument("--interactive", action="store_true",
                        help="Interactive mode with parameter prompts")
+    parser.add_argument("--print-guidance", action="store_true",
+                       help="Show 3D printing recommendations and material usage")
     parser.add_argument("filename", type=Path, default=Path("flowerpot"), nargs="?", help="Output file path.")
 
     try:
@@ -1030,6 +1171,29 @@ def main() -> None:
                 modular=args.modular,
                 sections=args.sections,
             )
+
+    # Handle --print-guidance
+    if args.print_guidance:
+        guidance = calculate_printing_guidance(params)
+        print(f"\n🖨️  3D Printing Guidance for {params.shape} pot")
+        print("=" * 50)
+        print(f"📊 Material Usage:")
+        print(f"   Volume: {guidance['volume_cm3']} cm³")
+        print(f"   Weight: {guidance['material_weight_g']} g")
+        print(f"   Estimated Cost: ${guidance['estimated_cost_usd']}")
+        print(f"   Estimated Time: {guidance['estimated_time_minutes']} minutes")
+        print(f"\n⚙️  Recommended Settings:")
+        print(f"   Layer Height: {guidance['layer_height_mm']} mm")
+        print(f"   Infill: {guidance['infill_percent']}%")
+        print(f"   Print Speed: {guidance['print_speed_mm_s']} mm/s")
+        print(f"   Material: {guidance['recommended_material']}")
+        print(f"   Bed Adhesion: {guidance['bed_adhesion']}")
+        print(f"   Supports Needed: {'Yes' if guidance['supports_needed'] else 'No'}")
+        print(f"\n💡 Recommendations:")
+        for rec in guidance['recommendations']:
+            print(f"   • {rec}")
+        print()
+        sys.exit(0)
 
     # Handle --save-preset
     if args.save_preset:
