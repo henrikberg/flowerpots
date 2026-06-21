@@ -1192,6 +1192,7 @@ def main() -> None:
         print(f"\n💡 Recommendations:")
         for rec in guidance['recommendations']:
             print(f"   • {rec}")
+        print(f"\n⚠️  WARNING: No print has been done using these instructions yet.")
         print()
         sys.exit(0)
 
